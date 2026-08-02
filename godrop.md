@@ -56,7 +56,12 @@ type serverConfig struct {
 }
 ```
 
+For now we will keep it simple and we will use **multipart file** in order to do sharing or **octet stream**. On server side we will open api port.
+With **GET** request on `/api/v1/share` with some global counter or mutex counter to track how many persons tried to download our file. This endpoint will require header if required with password inserted as bcrypt hash we won't send password via network as plain text. Header will be named `X-Password` and contains bcrypt hash.
+
 ### Client
+
+On client side we will send request to specificed host on the same endpoint as server and if required insert password header and download the file.
 
 ```go
 
