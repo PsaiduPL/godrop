@@ -151,7 +151,7 @@ func HandleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
 		return
 	}
 	responseWriter.Header().Add("Content-Type", "application/octet-stream")
-	fileName := path.Base(config.ShareFile.Path)
+	fileName := path.Clean(path.Base(config.ShareFile.Path))
 
 	responseWriter.Header().Add("X-FileName", fileName)
 	ext := ""
@@ -188,7 +188,7 @@ func informAboutIp() {
 		os.Exit(1)
 	}
 
-	slog.Info("Current local ip address", "ip", ip[0])
+	slog.Info("Current local ip address", "ip", ip)
 }
 
 func getLocalIPs() ([]net.IP, error) {
