@@ -74,7 +74,7 @@ func main() {
 			})
 
 			if err != nil {
-				slog.Error("Error while starting server", "error", err)
+				slog.Error("Error while getting file", "error", err)
 				os.Exit(1)
 			}
 

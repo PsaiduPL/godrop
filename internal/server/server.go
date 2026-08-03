@@ -152,7 +152,9 @@ func HandleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
 	}
 	responseWriter.Header().Add("Content-Type", "application/octet-stream")
 	fileName := path.Clean(path.Base(config.ShareFile.Path))
-
+	if config.ShareFile.IsDir {
+		fileName += ".zip"
+	}
 	responseWriter.Header().Add("X-FileName", fileName)
 	ext := ""
 	ext = path.Ext(config.ShareFile.Path)

@@ -90,6 +90,11 @@ func prepareHeader(clientConfig *ClientConfig) map[string]string {
 
 func handleResponse(response *http.Response) error {
 	defer response.Body.Close()
+	statusCode := response.StatusCode
+	if statusCode >= 400 && statusCode < 500 {
+		return fmt.Errorf("Error while making request to server check password")
+	}
+
 	header := response.Header
 	fileName := header.Get("X-FileName")
 	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
