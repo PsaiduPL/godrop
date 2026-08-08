@@ -2,8 +2,10 @@ package client
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"godrop/internal/common"
+	"godrop/internal/common/colored"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,33 +24,10 @@ type ClientOptions struct {
 }
 
 // postvalidated
-
 type ClientConfig struct {
 	from           string
 	hashedPassword []byte
 	port           uint
-}
-
-func (clientOptions *ClientOptions) validate() (*ClientConfig, error) {
-	var password = common.DefaultPassword
-	var from string
-	if clientOptions.From == nil {
-		return nil, fmt.Errorf("Invalid password cannot be empty")
-	}
-	from = *clientOptions.From
-
-	if clientOptions.Password != nil {
-		password = *clientOptions.Password
-	}
-	passHashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-	return &ClientConfig{
-		hashedPassword: passHashed,
-		from:           from,
-		port:           clientOptions.Port,
-	}, nil
 }
 
 func GetFile(clientOptions ClientOptions) error {
@@ -82,6 +61,28 @@ func GetFile(clientOptions ClientOptions) error {
 
 }
 
+func (clientOptions *ClientOptions) validate() (*ClientConfig, error) {
+	var password = common.DefaultPassword
+	var from string
+	if clientOptions.From == nil {
+		return nil, fmt.Errorf(colored.BuildColoredString("Invalid <RED>password<RED> cannot be empty"))
+	}
+	from = *clientOptions.From
+
+	if clientOptions.Password != nil {
+		password = *clientOptions.Password
+	}
+	passHashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientConfig{
+		hashedPassword: passHashed,
+		from:           from,
+		port:           clientOptions.Port,
+	}, nil
+}
+
 func prepareHeader(clientConfig *ClientConfig) map[string]string {
 	return map[string]string{
 		common.HeaderName: string(clientConfig.hashedPassword),
@@ -89,6 +90,7 @@ func prepareHeader(clientConfig *ClientConfig) map[string]string {
 }
 
 func handleResponse(response *http.Response) error {
+
 	defer response.Body.Close()
 	statusCode := response.StatusCode
 	if statusCode >= 400 && statusCode < 500 {
@@ -97,11 +99,24 @@ func handleResponse(response *http.Response) error {
 
 	header := response.Header
 	fileName := header.Get("X-FileName")
+	if fileExists(fileName) {
+		return fmt.Errorf("File with specified name exists rename file")
+	}
 	file, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	body := response.Body
 	_, err = io.Copy(file, body)
+	if err == nil {
+		colored.PrintColoredWithTags("<GREEN>File was succesfuly downloaded<GREEN> file <RED>%s<RED>\n", file.Name())
+	}
 	return err
+}
+
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrExist) {
+		return true
+	}
+	return false
 }

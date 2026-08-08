@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"godrop/internal/common"
+	"godrop/internal/common/colored"
+	"godrop/internal/common/log"
 	"godrop/internal/server/file"
+	"godrop/internal/server/ip"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +33,7 @@ type ServerOptions struct {
 	QrEnabled   bool
 	NTimes      *uint
 	Port        *uint16
+	LogLevel    *string
 }
 
 // postvalidated Server Config
@@ -39,6 +44,7 @@ type ServerConfig struct {
 	NTimes       uint
 	Port         uint16
 	ShareFile    file.ShareFile
+	LogLevel     slog.Level
 }
 
 type DropServer struct {
@@ -48,6 +54,18 @@ type DropServer struct {
 	CounterLock sync.RWMutex
 }
 
+func Start(options ServerOptions) error {
+	config, err := options.validate()
+	if err != nil {
+		return err
+	}
+	server := DropServer{
+		ServerConfig: *config,
+		Counter:      config.NTimes,
+	}
+	return server.start()
+}
+
 func (opts *ServerOptions) validate() (*ServerConfig, error) {
 	var (
 		password  = common.DefaultPassword
@@ -55,6 +73,7 @@ func (opts *ServerOptions) validate() (*ServerConfig, error) {
 		times     = DefaultTimes
 		qrEnabled = DefaultQrOptions
 		file      *file.ShareFile
+		logLevel  = log.DefaultLogLevel
 	)
 	if opts.Password != nil {
 		password = *opts.Password
@@ -72,6 +91,14 @@ func (opts *ServerOptions) validate() (*ServerConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	if opts.LogLevel != nil {
+		level, err := log.MapStringToSlogLevel(*opts.LogLevel)
+		if err != nil {
+			return nil, err
+		}
+		logLevel = level
+
+	}
 
 	return &ServerConfig{
 		Password:  password,
@@ -79,9 +106,13 @@ func (opts *ServerOptions) validate() (*ServerConfig, error) {
 		QrEnabled: qrEnabled,
 		NTimes:    times,
 		ShareFile: *file,
+		LogLevel:  logLevel,
 	}, nil
 }
 func validatePath(path *string) (*file.ShareFile, error) {
+	if path == nil || strings.TrimSpace(*path) == "" {
+		return nil, fmt.Errorf("No path provided")
+	}
 	var (
 		stat  os.FileInfo
 		isDir = false
@@ -101,21 +132,11 @@ func validatePath(path *string) (*file.ShareFile, error) {
 	}, nil
 
 }
-func Start(options ServerOptions) error {
-	config, err := options.validate()
-	if err != nil {
-		return err
-	}
-	server := DropServer{
-		ServerConfig: *config,
-		Counter:      config.NTimes,
-	}
-	return server.start()
-}
 
 func (dropServer *DropServer) start() error {
-	informAboutIp()
+	ip.InformAboutIp()
 	config := dropServer.ServerConfig
+	log.SetLogLevel(config.LogLevel)
 	mux := http.NewServeMux()
 	server := http.Server{
 		Addr:         fmt.Sprintf("0.0.0.0:%d", config.Port),
@@ -130,7 +151,7 @@ func (dropServer *DropServer) start() error {
 	}
 
 	slog.Info("Server started ", "port", config.Port)
-	mux.HandleFunc("GET /api/v1/share", HandleFileRequest)
+	mux.HandleFunc("GET /api/v1/share", handleFileRequest)
 	error := server.ListenAndServe()
 	if error != nil {
 		return error
@@ -139,31 +160,21 @@ func (dropServer *DropServer) start() error {
 	return nil
 }
 
-func HandleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
-	slog.Info("New request received")
-	server := req.Context().Value("server").(*DropServer)
-	config := server.ServerConfig
-	hashedPasswordHeader := req.Header.Get(common.HeaderName)
-
-	if err := bcrypt.CompareHashAndPassword([]byte(hashedPasswordHeader), []byte(config.Password)); err != nil {
-		slog.Warn("Invalid password for resource")
+func handleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
+	colored.PrintColoredWithTags("<GREEN>New request received<GREEN>\n")
+	// slog.Info("New request received")
+	var (
+		server = req.Context().Value("server").(*DropServer)
+		config = server.ServerConfig
+		err    error
+	)
+	err = checkHashInHeader(&config, &req.Header)
+	if err != nil {
 		http.Error(responseWriter, "Unauthorized", http.StatusUnauthorized)
-		return
 	}
-	responseWriter.Header().Add("Content-Type", "application/octet-stream")
-	fileName := path.Clean(path.Base(config.ShareFile.Path))
-	if config.ShareFile.IsDir {
-		fileName += ".zip"
-	}
-	responseWriter.Header().Add("X-FileName", fileName)
-	ext := ""
-	ext = path.Ext(config.ShareFile.Path)
-	if config.ShareFile.IsDir {
-		ext = ".zip"
-	}
-	responseWriter.Header().Add("X-FileExtension", ext)
-	responseWriter.WriteHeader(http.StatusOK)
-	err := config.ShareFile.WriteContent(responseWriter)
+
+	writeContentTypeAndFileName(&config, responseWriter)
+	err = config.ShareFile.WriteContent(responseWriter)
 	if err != nil {
 		slog.Error("Error while writing content", "error", err)
 		return
@@ -173,7 +184,8 @@ func HandleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
 	server.Counter -= 1
 	slog.Info("Succesfuly downloaded file ", "counter", server.Counter)
 	if server.Counter == 0 {
-		slog.Info("Exiting program as it was succesfuly downloaded by all users")
+		colored.PrintColoredWithTags("<RED>Exiting program as it was succesfuly downloaded by all users\n<RED>")
+		// slog.Info("Exiting program as it was succesfuly downloaded by all users")
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			os.Exit(0)
@@ -183,32 +195,32 @@ func HandleFileRequest(responseWriter http.ResponseWriter, req *http.Request) {
 
 }
 
-func informAboutIp() {
-	ip, err := getLocalIPs()
-	if err != nil {
-		slog.Error("Error while getting local address", "error", err)
-		os.Exit(1)
+func checkHashInHeader(serverConfig *ServerConfig, header *http.Header) error {
+	hashedPasswordHeader := header.Get(common.HeaderName)
+	if strings.TrimSpace(hashedPasswordHeader) == "" {
+		return fmt.Errorf("Empty header with password")
 	}
 
-	slog.Info("Current local ip address", "ip", ip)
+	if err := bcrypt.CompareHashAndPassword([]byte(hashedPasswordHeader), []byte(serverConfig.Password)); err != nil {
+		slog.Warn("Invalid password for resource")
+		return fmt.Errorf("Invalid password")
+	}
+	return nil
 }
 
-func getLocalIPs() ([]net.IP, error) {
-	var ips []net.IP
-	addresses, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
+func writeContentTypeAndFileName(serverConfig *ServerConfig, writer http.ResponseWriter) {
+	writer.Header().Add("Content-Type", "application/octet-stream")
+	fileName := path.Clean(path.Base(serverConfig.ShareFile.Path)) // if its folder add zip extension
+	if serverConfig.ShareFile.IsDir {
+		fileName += ".zip"
 	}
+	writer.Header().Add("X-FileName", fileName)
+	ext := ""
+	ext = path.Ext(serverConfig.ShareFile.Path)
+	if serverConfig.ShareFile.IsDir {
+		ext = ".zip"
+	}
+	writer.Header().Add("X-FileExtension", ext)
+	writer.WriteHeader(http.StatusOK)
 
-	for _, addr := range addresses {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				ips = append(ips, ipnet.IP)
-			}
-		}
-	}
-	if len(ips) == 0 {
-		return nil, fmt.Errorf("No addreses found")
-	}
-	return ips, nil
 }
