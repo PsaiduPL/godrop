@@ -4,6 +4,7 @@ import (
 	"flag"
 	"godrop/internal/client"
 	"godrop/internal/common"
+	"godrop/internal/common/colored"
 	"godrop/internal/common/log"
 	"godrop/internal/server"
 	"log/slog"
@@ -59,7 +60,7 @@ func (s *ServerCommand) Execute() {
 		LogLevel:    &LogLevel,
 	})
 	if err != nil {
-		slog.Error("Error while starting server", "error", err)
+		colored.PrintColoredWithTags("Error while starting server <RED>%s<RED>\n", err)
 		os.Exit(1)
 	}
 }
@@ -99,7 +100,7 @@ func (g *GetCommand) Execute() {
 	})
 
 	if err != nil {
-		slog.Error("Error while getting file", "error", err)
+		colored.PrintColoredWithTags("Error while getting file <RED>%s<RED>\n", err)
 		os.Exit(1)
 	}
 
