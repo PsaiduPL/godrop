@@ -119,7 +119,7 @@ func validatePath(path *string) (*file.ShareFile, error) {
 		err   error
 	)
 
-	if stat, err = os.Stat(*path); err != nil && os.IsExist(err) {
+	if stat, err = os.Stat(*path); err != nil || os.IsExist(err) {
 		return nil, err
 	}
 	if stat.IsDir() {
