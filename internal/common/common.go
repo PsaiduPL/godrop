@@ -4,4 +4,3 @@ const (
 	DefaultPassword = "magicPassword"
 	HeaderName      = "X-Password"
 )
-

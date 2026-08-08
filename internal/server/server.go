@@ -210,7 +210,7 @@ func checkHashInHeader(serverConfig *ServerConfig, header *http.Header) error {
 
 func writeContentTypeAndFileName(serverConfig *ServerConfig, writer http.ResponseWriter) {
 	writer.Header().Add("Content-Type", "application/octet-stream")
-	fileName := path.Clean(path.Base(serverConfig.ShareFile.Path)) // if its folder add zip extension
+	fileName := path.Base(path.Clean(serverConfig.ShareFile.Path)) // if its folder add zip extension
 	if serverConfig.ShareFile.IsDir {
 		fileName += ".zip"
 	}

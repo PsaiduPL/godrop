@@ -3,6 +3,7 @@ package ip
 import (
 	"fmt"
 	"godrop/internal/common/colored"
+	"strings"
 
 	"log/slog"
 	"net"
@@ -29,11 +30,13 @@ func getLocalIPs() ([]net.IP, error) {
 
 	for _, addr := range addresses {
 		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
+			if ipnet.IP.To4() != nil && strings.HasPrefix(ipnet.String(), "192") { // only local ip addresses to display
+
 				ips = append(ips, ipnet.IP)
 			}
 		}
 	}
+
 	if len(ips) == 0 {
 		return nil, fmt.Errorf(colored.BuildColoredString("<RED>No addreses found<RED>"))
 	}

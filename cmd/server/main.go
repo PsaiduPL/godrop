@@ -14,9 +14,6 @@ var (
 func main() {
 	commands := []Command{&ServerCommand{}, &GetCommand{}}
 	buildUsage(commands)
-	flag.Usage = func() {
-		fmt.Printf("%s\n", usage)
-	}
 	if len(os.Args) < 2 {
 		flag.Usage()
 		os.Exit(1)
@@ -40,4 +37,7 @@ func buildUsage(cmds []Command) {
 	}
 
 	usage += colored.BuildColoredString("<BLUE>if you don't know how to use it use -h<BLUE>")
+	flag.Usage = func() {
+		fmt.Printf("%s\n", usage)
+	}
 }
