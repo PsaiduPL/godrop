@@ -12,7 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -210,13 +210,13 @@ func checkHashInHeader(serverConfig *ServerConfig, header *http.Header) error {
 
 func writeContentTypeAndFileName(serverConfig *ServerConfig, writer http.ResponseWriter) {
 	writer.Header().Add("Content-Type", "application/octet-stream")
-	fileName := path.Base(path.Clean(serverConfig.ShareFile.Path)) // if its folder add zip extension
+	fileName := filepath.Base(filepath.Clean(serverConfig.ShareFile.Path)) // if its folder add zip extension
 	if serverConfig.ShareFile.IsDir {
 		fileName += ".zip"
 	}
 	writer.Header().Add("X-FileName", fileName)
 	ext := ""
-	ext = path.Ext(serverConfig.ShareFile.Path)
+	ext = filepath.Ext(serverConfig.ShareFile.Path)
 	if serverConfig.ShareFile.IsDir {
 		ext = ".zip"
 	}
