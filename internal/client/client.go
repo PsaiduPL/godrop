@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -64,8 +65,8 @@ func GetFile(clientOptions ClientOptions) error {
 func (clientOptions *ClientOptions) validate() (*ClientConfig, error) {
 	var password = common.DefaultPassword
 	var from string
-	if clientOptions.From == nil {
-		return nil, fmt.Errorf(colored.BuildColoredString("Invalid <RED>password<RED> cannot be empty"))
+	if clientOptions.From == nil || strings.TrimSpace(*clientOptions.From) == "" {
+		return nil, fmt.Errorf(colored.BuildColoredString("Invalid <RED>IP<RED> cannot be empty"))
 	}
 	from = *clientOptions.From
 
